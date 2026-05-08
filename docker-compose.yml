@@ -1,0 +1,13 @@
+services:
+  ms-clientes:
+    build: ./ms-clientes
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    networks:
+      - banco-network
+
+networks:
+  banco-network:
+    driver: bridge
