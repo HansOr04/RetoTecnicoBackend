@@ -23,6 +23,13 @@ public class MovimientoService {
         this.cuentaRepository = cuentaRepository;
     }
 
+    public List<MovimientoResponseDTO> listarTodos() {
+        return movimientoRepository.findAll()
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
     public MovimientoResponseDTO registrar(MovimientoRequestDTO dto) {
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(dto.getNumeroCuenta())
                 .orElseThrow(() -> new RuntimeException("Cuenta no encontrada"));
