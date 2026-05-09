@@ -1,6 +1,6 @@
 package com.banco.mscuentas.infrastructure.controller;
 
-import com.banco.mscuentas.application.service.MovimientoService;
+import com.banco.mscuentas.application.service.IMovimientoService;
 import com.banco.mscuentas.dto.MovimientoRequestDTO;
 import com.banco.mscuentas.dto.MovimientoResponseDTO;
 import jakarta.validation.Valid;
@@ -14,9 +14,9 @@ import java.util.List;
 @RequestMapping("/movimientos")
 public class MovimientoController {
 
-    private final MovimientoService movimientoService;
+    private final IMovimientoService movimientoService;
 
-    public MovimientoController(MovimientoService movimientoService) {
+    public MovimientoController(IMovimientoService movimientoService) {
         this.movimientoService = movimientoService;
     }
 
@@ -28,5 +28,27 @@ public class MovimientoController {
     @PostMapping
     public ResponseEntity<MovimientoResponseDTO> registrar(@Valid @RequestBody MovimientoRequestDTO dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(movimientoService.registrar(dto));
+    }
+
+    /**
+     * Actualiza un movimiento existente.
+     * NOTA: en producción este endpoint debe estar protegido por autorización,
+     * ya que los movimientos bancarios son registros históricos inmutables.
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<MovimientoResponseDTO> actualizar(
+            @PathVariable Long id,
+            @Valid @RequestBody MovimientoRequestDTO dto) {
+        return ResponseEntity.ok(movimientoService.actualizar(id, dto));
+    }
+
+    /**
+     * Elimina un movimiento por ID.
+     * NOTA: en producción este endpoint debe estar protegido por autorización.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> eliminar(@PathVariable Long id) {
+        movimientoService.eliminar(id);
+        return ResponseEntity.ok("Movimiento eliminado correctamente");
     }
 }

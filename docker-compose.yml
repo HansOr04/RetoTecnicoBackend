@@ -7,6 +7,12 @@ services:
       SPRING_PROFILES_ACTIVE: docker
     networks:
       - banco-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/clientes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   ms-cuentas:
     build: ./ms-cuentas
@@ -17,7 +23,14 @@ services:
     networks:
       - banco-network
     depends_on:
-      - ms-clientes
+      ms-clientes:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/cuentas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 networks:
   banco-network:

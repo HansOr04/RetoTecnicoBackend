@@ -28,6 +28,8 @@ cd ms-cuentas  && mvn clean package -DskipTests && cd ..
 docker-compose up --build
 ```
 
+ms-cuentas esperará a que ms-clientes pase su healthcheck antes de arrancar.
+
 Para detener:
 ```bash
 docker-compose down
@@ -51,9 +53,28 @@ cd ms-cuentas
 mvn spring-boot:run
 ```
 
-Consolas H2:
+Consolas H2 (solo disponibles en perfil local):
 - http://localhost:8081/h2-console  (JDBC URL: `jdbc:h2:mem:clientesdb`)
 - http://localhost:8082/h2-console  (JDBC URL: `jdbc:h2:mem:cuentasdb`)
+
+---
+
+## Seguridad
+
+- Las contraseñas de clientes se almacenan con hash **BCrypt** — nunca en texto plano.
+- Ningún endpoint expone la contraseña en las respuestas (campo ausente en `ClienteResponseDTO`).
+- La consola H2 está **deshabilitada** en el perfil Docker/producción (`application-docker.properties`).
+- Stack traces ni detalles internos son expuestos en respuestas de error.
+- Validación de entrada con `@Valid` en todos los endpoints que reciben body.
+
+---
+
+## Decisiones de diseño
+
+- **clienteId en Cuenta es referencia lógica (String):** cada microservicio tiene su propia base de datos. La consistencia entre ms-clientes y ms-cuentas se garantiza a nivel de aplicación, no con FK de BD, siguiendo el patrón de microservicios.
+- **Movimientos sin PUT/DELETE funcional en negocio:** los movimientos bancarios son registros históricos. Los endpoints `PUT /movimientos/{id}` y `DELETE /movimientos/{id}` existen para completar el CRUD requerido, pero en producción deben estar protegidos por autorización.
+- **Interfaces de servicio (`IClienteService`, `ICuentaService`, `IMovimientoService`):** los controllers dependen de abstracciones, no de implementaciones concretas, facilitando extensibilidad y pruebas.
+- **Excepciones de dominio propias:** `ClienteNoEncontradoException`, `SaldoInsuficienteException`, etc., permiten que el `GlobalExceptionHandler` mapee cada caso a su HTTP status sin depender de strings en los mensajes.
 
 ---
 
@@ -92,17 +113,7 @@ Content-Type: application/json
 PUT http://localhost:8081/clientes/{clienteId}
 Content-Type: application/json
 
-{
-  "clienteId": "jose.lema",
-  "nombre": "Jose Lema",
-  "genero": "M",
-  "edad": 36,
-  "identificacion": "1234567890",
-  "direccion": "Otavalo sn y principal",
-  "telefono": "098254785",
-  "contrasena": "5678",
-  "estado": true
-}
+{ ... mismos campos que POST ... }
 ```
 
 ### Eliminar cliente
@@ -124,6 +135,11 @@ GET http://localhost:8082/cuentas
 GET http://localhost:8082/cuentas/{numeroCuenta}
 ```
 
+### Obtener cuentas por clienteId
+```
+GET http://localhost:8082/cuentas/cliente/{clienteId}
+```
+
 ### Crear cuenta
 ```
 POST http://localhost:8082/cuentas
@@ -143,13 +159,7 @@ Content-Type: application/json
 PUT http://localhost:8082/cuentas/{numeroCuenta}
 Content-Type: application/json
 
-{
-  "numeroCuenta": "478758",
-  "tipoCuenta": "Ahorro",
-  "saldoInicial": 2000.0,
-  "estado": true,
-  "clienteId": "jose.lema"
-}
+{ ... mismos campos que POST ... }
 ```
 
 ### Eliminar cuenta
@@ -174,6 +184,16 @@ Content-Type: application/json
 }
 ```
 
+### Actualizar movimiento (proteger con auth en producción)
+```
+PUT http://localhost:8082/movimientos/{id}
+```
+
+### Eliminar movimiento (proteger con auth en producción)
+```
+DELETE http://localhost:8082/movimientos/{id}
+```
+
 ### Reporte por cliente y rango de fechas
 ```
 GET http://localhost:8082/reportes?clienteId=jose.lema&fechaInicio=2024-01-01&fechaFin=2024-01-31
@@ -183,17 +203,15 @@ GET http://localhost:8082/reportes?clienteId=jose.lema&fechaInicio=2024-01-01&fe
 
 ## Casos de uso resueltos
 
-Los siguientes escenarios replican los datos del enunciado del reto técnico.
+### Clientes del enunciado
 
-### Configuración inicial de clientes
-
-| Cliente | clienteId | Contraseña | Estado |
+| Cliente | clienteId | Contraseña (plain) | Estado |
 |---|---|---|---|
 | Jose Lema | jose.lema | 1234 | true |
 | Marianela Montalvo | marianela.montalvo | 5678 | true |
 | Juan Osorio | juan.osorio | 1245 | true |
 
-### Configuración inicial de cuentas
+### Cuentas del enunciado
 
 | Número | Tipo | Saldo inicial | Cliente |
 |---|---|---|---|
@@ -207,14 +225,9 @@ Los siguientes escenarios replican los datos del enunciado del reto técnico.
 
 **Cuenta 478758 — Jose Lema (Ahorro, saldo inicial: 2000.00)**
 ```
-POST /movimientos  { "numeroCuenta": "478758", "tipoMovimiento": "Retiro",  "valor": 575.0 }
-→ saldo resultante: 1425.00
-
-POST /movimientos  { "numeroCuenta": "478758", "tipoMovimiento": "Deposito", "valor": 600.0 }
-→ saldo resultante: 2025.00
-
-POST /movimientos  { "numeroCuenta": "478758", "tipoMovimiento": "Retiro",  "valor": 2025.0 }
-→ saldo resultante: 0.00
+POST /movimientos  { "numeroCuenta": "478758", "tipoMovimiento": "Retiro",   "valor": 575.0  } → saldo: 1425.00
+POST /movimientos  { "numeroCuenta": "478758", "tipoMovimiento": "Deposito", "valor": 600.0  } → saldo: 2025.00
+POST /movimientos  { "numeroCuenta": "478758", "tipoMovimiento": "Retiro",   "valor": 2025.0 } → saldo: 0.00
 ```
 
 **Cuenta 225487 — Marianela Montalvo (Corriente, saldo inicial: 100.00)**
@@ -225,23 +238,18 @@ POST /movimientos  { "numeroCuenta": "225487", "tipoMovimiento": "Retiro", "valo
 
 **Cuenta 495878 — Marianela Montalvo (Ahorro, saldo inicial: 0.00)**
 ```
-POST /movimientos  { "numeroCuenta": "495878", "tipoMovimiento": "Deposito", "valor": 150.0 }
-→ saldo resultante: 150.00
+POST /movimientos  { "numeroCuenta": "495878", "tipoMovimiento": "Deposito", "valor": 150.0 } → saldo: 150.00
 ```
 
 **Cuenta 496825 — Juan Osorio (Ahorro, saldo inicial: 540.00)**
 ```
-POST /movimientos  { "numeroCuenta": "496825", "tipoMovimiento": "Retiro", "valor": 540.0 }
-→ saldo resultante: 0.00
+POST /movimientos  { "numeroCuenta": "496825", "tipoMovimiento": "Retiro", "valor": 540.0 } → saldo: 0.00
 ```
 
 **Cuenta 585545 — Jose Lema (Corriente, saldo inicial: 1000.00)**
 ```
-POST /movimientos  { "numeroCuenta": "585545", "tipoMovimiento": "Deposito", "valor": 1000.0 }
-→ saldo resultante: 2000.00
-
-POST /movimientos  { "numeroCuenta": "585545", "tipoMovimiento": "Retiro",  "valor": 1500.0 }
-→ saldo resultante: 500.00
+POST /movimientos  { "numeroCuenta": "585545", "tipoMovimiento": "Deposito", "valor": 1000.0 } → saldo: 2000.00
+POST /movimientos  { "numeroCuenta": "585545", "tipoMovimiento": "Retiro",   "valor": 1500.0 } → saldo: 500.00
 ```
 
 ### Reporte de estado de cuenta
@@ -249,7 +257,7 @@ POST /movimientos  { "numeroCuenta": "585545", "tipoMovimiento": "Retiro",  "val
 GET /reportes?clienteId=jose.lema&fechaInicio=2024-01-01&fechaFin=2024-12-31
 ```
 
-Respuesta esperada (ejemplo):
+Respuesta (ejemplo):
 ```json
 [
   {
@@ -269,8 +277,6 @@ Respuesta esperada (ejemplo):
 
 ## Manejo de errores
 
-Todas las respuestas de error siguen el mismo formato:
-
 ```json
 {
   "timestamp": "2024-01-10T10:00:00.000",
@@ -284,5 +290,8 @@ Todas las respuestas de error siguen el mismo formato:
 |---|---|
 | Campos inválidos en el body | 400 |
 | Saldo insuficiente para retiro | 400 |
+| Tipo de movimiento inválido | 400 |
+| Formato de fecha inválido | 400 |
 | Cliente / Cuenta no encontrado | 404 |
+| Cliente / Cuenta ya registrado | 409 |
 | Error interno del servidor | 500 |

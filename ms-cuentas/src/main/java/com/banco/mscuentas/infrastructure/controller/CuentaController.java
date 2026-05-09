@@ -1,6 +1,6 @@
 package com.banco.mscuentas.infrastructure.controller;
 
-import com.banco.mscuentas.application.service.CuentaService;
+import com.banco.mscuentas.application.service.ICuentaService;
 import com.banco.mscuentas.dto.CuentaRequestDTO;
 import com.banco.mscuentas.dto.CuentaResponseDTO;
 import jakarta.validation.Valid;
@@ -14,9 +14,9 @@ import java.util.List;
 @RequestMapping("/cuentas")
 public class CuentaController {
 
-    private final CuentaService cuentaService;
+    private final ICuentaService cuentaService;
 
-    public CuentaController(CuentaService cuentaService) {
+    public CuentaController(ICuentaService cuentaService) {
         this.cuentaService = cuentaService;
     }
 
@@ -28,6 +28,11 @@ public class CuentaController {
     @GetMapping("/{numeroCuenta}")
     public ResponseEntity<CuentaResponseDTO> obtenerPorNumeroCuenta(@PathVariable String numeroCuenta) {
         return ResponseEntity.ok(cuentaService.obtenerPorNumeroCuenta(numeroCuenta));
+    }
+
+    @GetMapping("/cliente/{clienteId}")
+    public ResponseEntity<List<CuentaResponseDTO>> obtenerPorClienteId(@PathVariable String clienteId) {
+        return ResponseEntity.ok(cuentaService.obtenerPorClienteId(clienteId));
     }
 
     @PostMapping

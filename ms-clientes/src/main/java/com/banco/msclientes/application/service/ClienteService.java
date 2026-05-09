@@ -1,22 +1,33 @@
 package com.banco.msclientes.application.service;
 
+import com.banco.msclientes.domain.exception.ClienteDuplicadoException;
+import com.banco.msclientes.domain.exception.ClienteNoEncontradoException;
 import com.banco.msclientes.domain.model.Cliente;
 import com.banco.msclientes.domain.repository.ClienteRepository;
 import com.banco.msclientes.dto.ClienteRequestDTO;
 import com.banco.msclientes.dto.ClienteResponseDTO;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * Implementación de {@link IClienteService}.
+ * Aplica hash BCrypt a la contraseña antes de persistir.
+ * Nunca expone la contraseña en los DTOs de respuesta.
+ */
 @Service
-public class ClienteService {
+public class ClienteService implements IClienteService {
 
     private final ClienteRepository clienteRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public ClienteService(ClienteRepository clienteRepository) {
+    public ClienteService(ClienteRepository clienteRepository, PasswordEncoder passwordEncoder) {
         this.clienteRepository = clienteRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
+    @Override
     public List<ClienteResponseDTO> listarTodos() {
         return clienteRepository.findAll()
                 .stream()
@@ -24,15 +35,17 @@ public class ClienteService {
                 .toList();
     }
 
+    @Override
     public ClienteResponseDTO obtenerPorClienteId(String clienteId) {
         Cliente cliente = clienteRepository.findByClienteId(clienteId)
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+                .orElseThrow(() -> new ClienteNoEncontradoException(clienteId));
         return mapToResponse(cliente);
     }
 
+    @Override
     public ClienteResponseDTO crear(ClienteRequestDTO dto) {
         if (clienteRepository.existsByClienteId(dto.getClienteId())) {
-            throw new RuntimeException("El clienteId ya está registrado");
+            throw new ClienteDuplicadoException(dto.getClienteId());
         }
         Cliente cliente = Cliente.builder()
                 .clienteId(dto.getClienteId())
@@ -42,29 +55,31 @@ public class ClienteService {
                 .identificacion(dto.getIdentificacion())
                 .direccion(dto.getDireccion())
                 .telefono(dto.getTelefono())
-                .contrasena(dto.getContrasena())
+                .contrasena(passwordEncoder.encode(dto.getContrasena()))
                 .estado(dto.getEstado())
                 .build();
         return mapToResponse(clienteRepository.save(cliente));
     }
 
+    @Override
     public ClienteResponseDTO actualizar(String clienteId, ClienteRequestDTO dto) {
         Cliente cliente = clienteRepository.findByClienteId(clienteId)
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+                .orElseThrow(() -> new ClienteNoEncontradoException(clienteId));
         cliente.setNombre(dto.getNombre());
         cliente.setGenero(dto.getGenero());
         cliente.setEdad(dto.getEdad());
         cliente.setIdentificacion(dto.getIdentificacion());
         cliente.setDireccion(dto.getDireccion());
         cliente.setTelefono(dto.getTelefono());
-        cliente.setContrasena(dto.getContrasena());
+        cliente.setContrasena(passwordEncoder.encode(dto.getContrasena()));
         cliente.setEstado(dto.getEstado());
         return mapToResponse(clienteRepository.save(cliente));
     }
 
+    @Override
     public void eliminar(String clienteId) {
         Cliente cliente = clienteRepository.findByClienteId(clienteId)
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+                .orElseThrow(() -> new ClienteNoEncontradoException(clienteId));
         clienteRepository.deleteById(cliente.getId());
     }
 
@@ -78,7 +93,6 @@ public class ClienteService {
                 .identificacion(cliente.getIdentificacion())
                 .direccion(cliente.getDireccion())
                 .telefono(cliente.getTelefono())
-                .contrasena(cliente.getContrasena())
                 .estado(cliente.getEstado())
                 .build();
     }

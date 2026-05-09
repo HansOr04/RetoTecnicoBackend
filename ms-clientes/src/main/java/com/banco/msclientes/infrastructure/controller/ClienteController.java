@@ -1,6 +1,6 @@
 package com.banco.msclientes.infrastructure.controller;
 
-import com.banco.msclientes.application.service.ClienteService;
+import com.banco.msclientes.application.service.IClienteService;
 import com.banco.msclientes.dto.ClienteRequestDTO;
 import com.banco.msclientes.dto.ClienteResponseDTO;
 import jakarta.validation.Valid;
@@ -14,9 +14,9 @@ import java.util.List;
 @RequestMapping("/clientes")
 public class ClienteController {
 
-    private final ClienteService clienteService;
+    private final IClienteService clienteService;
 
-    public ClienteController(ClienteService clienteService) {
+    public ClienteController(IClienteService clienteService) {
         this.clienteService = clienteService;
     }
 

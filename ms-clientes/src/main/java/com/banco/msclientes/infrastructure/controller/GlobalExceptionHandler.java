@@ -1,5 +1,7 @@
 package com.banco.msclientes.infrastructure.controller;
 
+import com.banco.msclientes.domain.exception.ClienteDuplicadoException;
+import com.banco.msclientes.domain.exception.ClienteNoEncontradoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -20,36 +22,27 @@ public class GlobalExceptionHandler {
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
             fieldErrors.put(error.getField(), error.getDefaultMessage());
         }
-        return ResponseEntity.badRequest().body(buildBody(
-                HttpStatus.BAD_REQUEST.value(),
-                "Errores de validación",
-                fieldErrors
-        ));
+        return ResponseEntity.badRequest().body(buildBody(HttpStatus.BAD_REQUEST.value(),
+                "Errores de validación", fieldErrors));
     }
 
-    @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException ex) {
-        if (ex.getMessage() != null && ex.getMessage().contains("Cliente no encontrado")) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(buildBody(
-                    HttpStatus.NOT_FOUND.value(),
-                    ex.getMessage(),
-                    null
-            ));
-        }
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildBody(
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                ex.getMessage(),
-                null
-        ));
+    @ExceptionHandler(ClienteNoEncontradoException.class)
+    public ResponseEntity<Map<String, Object>> handleClienteNoEncontrado(ClienteNoEncontradoException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(buildBody(HttpStatus.NOT_FOUND.value(), ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(ClienteDuplicadoException.class)
+    public ResponseEntity<Map<String, Object>> handleClienteDuplicado(ClienteDuplicadoException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(buildBody(HttpStatus.CONFLICT.value(), ex.getMessage(), null));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildBody(
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "Error interno del servidor",
-                null
-        ));
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(buildBody(HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                        "Error interno del servidor", null));
     }
 
     private Map<String, Object> buildBody(int status, String message, Map<String, String> errors) {

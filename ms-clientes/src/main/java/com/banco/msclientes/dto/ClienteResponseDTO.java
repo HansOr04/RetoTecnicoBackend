@@ -17,6 +17,5 @@ public class ClienteResponseDTO {
     private String identificacion;
     private String direccion;
     private String telefono;
-    private String contrasena;
     private Boolean estado;
 }

@@ -1,6 +1,6 @@
 package com.banco.mscuentas.infrastructure.controller;
 
-import com.banco.mscuentas.application.service.MovimientoService;
+import com.banco.mscuentas.application.service.IMovimientoService;
 import com.banco.mscuentas.dto.ReporteDTO;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,9 +17,9 @@ import java.util.List;
 @RequestMapping("/reportes")
 public class ReporteController {
 
-    private final MovimientoService movimientoService;
+    private final IMovimientoService movimientoService;
 
-    public ReporteController(MovimientoService movimientoService) {
+    public ReporteController(IMovimientoService movimientoService) {
         this.movimientoService = movimientoService;
     }
 
