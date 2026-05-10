@@ -9,6 +9,7 @@ import com.banco.msclientes.dto.ClienteResponseDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -119,7 +120,14 @@ class ClienteServiceTest {
         ClienteResponseDTO resultado = clienteService.crear(requestJoseLema);
 
         assertThat(resultado.getClienteId()).isEqualTo("jose.lema");
-        verify(clienteRepository, times(1)).save(any(Cliente.class));
+
+        ArgumentCaptor<Cliente> captor = ArgumentCaptor.forClass(Cliente.class);
+        verify(clienteRepository).save(captor.capture());
+        Cliente clienteGuardado = captor.getValue();
+        assertThat(clienteGuardado.getClienteId()).isEqualTo(requestJoseLema.getClienteId());
+        assertThat(clienteGuardado.getContrasena()).startsWith("$2a$");
+        assertThat(clienteGuardado.getContrasena()).isNotEqualTo("1234");
+
         verify(passwordEncoder, times(1)).encode("1234");
     }
 
@@ -130,6 +138,8 @@ class ClienteServiceTest {
         assertThatThrownBy(() -> clienteService.crear(requestJoseLema))
                 .isInstanceOf(ClienteDuplicadoException.class)
                 .hasMessageContaining("jose.lema");
+
+        verify(clienteRepository, never()).save(any());
     }
 
     @Test
@@ -188,5 +198,7 @@ class ClienteServiceTest {
         assertThatThrownBy(() -> clienteService.eliminar("inexistente"))
                 .isInstanceOf(ClienteNoEncontradoException.class)
                 .hasMessageContaining("inexistente");
+
+        verify(clienteRepository, never()).deleteById(any());
     }
 }

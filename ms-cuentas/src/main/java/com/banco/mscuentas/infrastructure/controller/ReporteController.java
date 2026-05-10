@@ -32,6 +32,10 @@ public class ReporteController {
         LocalDateTime inicio = LocalDate.parse(fechaInicio).atStartOfDay();
         LocalDateTime fin = LocalDate.parse(fechaFin).atTime(LocalTime.MAX);
 
+        if (inicio.isAfter(fin)) {
+            throw new IllegalArgumentException("fechaInicio no puede ser posterior a fechaFin");
+        }
+
         return ResponseEntity.ok(movimientoService.generarReporte(clienteId, inicio, fin));
     }
 }

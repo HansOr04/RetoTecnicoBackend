@@ -1,12 +1,15 @@
 package com.banco.mscuentas.application.service;
 
+import com.banco.mscuentas.domain.exception.CuentaConMovimientosException;
 import com.banco.mscuentas.domain.exception.CuentaDuplicadaException;
 import com.banco.mscuentas.domain.exception.CuentaNoEncontradaException;
 import com.banco.mscuentas.domain.model.Cuenta;
 import com.banco.mscuentas.domain.repository.CuentaRepository;
+import com.banco.mscuentas.domain.repository.MovimientoRepository;
 import com.banco.mscuentas.dto.CuentaRequestDTO;
 import com.banco.mscuentas.dto.CuentaResponseDTO;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -19,12 +22,15 @@ import java.util.List;
 public class CuentaService implements ICuentaService {
 
     private final CuentaRepository cuentaRepository;
+    private final MovimientoRepository movimientoRepository;
 
-    public CuentaService(CuentaRepository cuentaRepository) {
+    public CuentaService(CuentaRepository cuentaRepository, MovimientoRepository movimientoRepository) {
         this.cuentaRepository = cuentaRepository;
+        this.movimientoRepository = movimientoRepository;
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<CuentaResponseDTO> listarTodas() {
         return cuentaRepository.findAll()
                 .stream()
@@ -33,6 +39,7 @@ public class CuentaService implements ICuentaService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public CuentaResponseDTO obtenerPorNumeroCuenta(String numeroCuenta) {
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta)
                 .orElseThrow(() -> new CuentaNoEncontradaException(numeroCuenta));
@@ -40,6 +47,7 @@ public class CuentaService implements ICuentaService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<CuentaResponseDTO> obtenerPorClienteId(String clienteId) {
         return cuentaRepository.findByClienteId(clienteId)
                 .stream()
@@ -48,6 +56,7 @@ public class CuentaService implements ICuentaService {
     }
 
     @Override
+    @Transactional
     public CuentaResponseDTO crear(CuentaRequestDTO dto) {
         if (cuentaRepository.findByNumeroCuenta(dto.getNumeroCuenta()).isPresent()) {
             throw new CuentaDuplicadaException(dto.getNumeroCuenta());
@@ -64,6 +73,7 @@ public class CuentaService implements ICuentaService {
     }
 
     @Override
+    @Transactional
     public CuentaResponseDTO actualizar(String numeroCuenta, CuentaRequestDTO dto) {
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta)
                 .orElseThrow(() -> new CuentaNoEncontradaException(numeroCuenta));
@@ -75,9 +85,13 @@ public class CuentaService implements ICuentaService {
     }
 
     @Override
+    @Transactional
     public void eliminar(String numeroCuenta) {
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta)
                 .orElseThrow(() -> new CuentaNoEncontradaException(numeroCuenta));
+        if (movimientoRepository.existsByCuenta(cuenta)) {
+            throw new CuentaConMovimientosException(numeroCuenta);
+        }
         cuentaRepository.deleteById(cuenta.getId());
     }
 

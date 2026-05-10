@@ -12,4 +12,6 @@ public interface MovimientoRepository extends JpaRepository<Movimiento, Long> {
     List<Movimiento> findByCuentaAndFechaBetween(Cuenta cuenta, LocalDateTime inicio, LocalDateTime fin);
 
     List<Movimiento> findByCuenta_ClienteIdAndFechaBetween(String clienteId, LocalDateTime inicio, LocalDateTime fin);
+
+    boolean existsByCuenta(Cuenta cuenta);
 }

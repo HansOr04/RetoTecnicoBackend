@@ -10,8 +10,11 @@ import com.banco.mscuentas.domain.repository.MovimientoRepository;
 import com.banco.mscuentas.dto.MovimientoRequestDTO;
 import com.banco.mscuentas.dto.MovimientoResponseDTO;
 import com.banco.mscuentas.dto.ReporteDTO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -19,6 +22,7 @@ import java.util.List;
  * Implementación de {@link IMovimientoService}.
  * Ver Javadoc de la interfaz para las 7 reglas de negocio garantizadas.
  */
+@Slf4j
 @Service
 public class MovimientoService implements IMovimientoService {
 
@@ -31,6 +35,7 @@ public class MovimientoService implements IMovimientoService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<MovimientoResponseDTO> listarTodos() {
         return movimientoRepository.findAll()
                 .stream()
@@ -38,21 +43,34 @@ public class MovimientoService implements IMovimientoService {
                 .toList();
     }
 
+    /**
+     * Registra un movimiento (depósito o retiro) y actualiza el saldo disponible.
+     * Ejecuta en una única transacción atómica: si la persistencia del movimiento
+     * falla, el cambio de saldo en la cuenta se revierte automáticamente.
+     */
     @Override
+    @Transactional
     public MovimientoResponseDTO registrar(MovimientoRequestDTO dto) {
+        log.info("Registrando movimiento: cuenta={}, tipo={}, monto={}",
+                dto.getNumeroCuenta(), dto.getTipoMovimiento(), dto.getValor());
+
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(dto.getNumeroCuenta())
                 .orElseThrow(() -> new CuentaNoEncontradaException(dto.getNumeroCuenta()));
 
         TipoMovimiento tipo = TipoMovimiento.fromString(dto.getTipoMovimiento());
 
-        double nuevoSaldo = switch (tipo) {
-            case DEPOSITO -> cuenta.getSaldoDisponible() + dto.getValor();
-            case RETIRO   -> cuenta.getSaldoDisponible() - dto.getValor();
+        BigDecimal nuevoSaldo = switch (tipo) {
+            case DEPOSITO -> cuenta.getSaldoDisponible().add(dto.getValor());
+            case RETIRO -> {
+                BigDecimal resultado = cuenta.getSaldoDisponible().subtract(dto.getValor());
+                if (resultado.compareTo(BigDecimal.ZERO) < 0) {
+                    log.warn("Saldo insuficiente: cuenta={}, saldoDisponible={}, montoSolicitado={}",
+                            cuenta.getNumeroCuenta(), cuenta.getSaldoDisponible(), dto.getValor());
+                    throw new SaldoInsuficienteException();
+                }
+                yield resultado;
+            }
         };
-
-        if (nuevoSaldo < 0) {
-            throw new SaldoInsuficienteException();
-        }
 
         cuenta.setSaldoDisponible(nuevoSaldo);
         cuentaRepository.save(cuenta);
@@ -65,10 +83,14 @@ public class MovimientoService implements IMovimientoService {
                 .cuenta(cuenta)
                 .build();
 
-        return mapToResponse(movimientoRepository.save(movimiento));
+        MovimientoResponseDTO response = mapToResponse(movimientoRepository.save(movimiento));
+        log.info("Movimiento registrado exitosamente: cuenta={}, nuevoSaldo={}",
+                dto.getNumeroCuenta(), nuevoSaldo);
+        return response;
     }
 
     @Override
+    @Transactional
     public MovimientoResponseDTO actualizar(Long id, MovimientoRequestDTO dto) {
         Movimiento movimiento = movimientoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Movimiento no encontrado: " + id));
@@ -79,6 +101,7 @@ public class MovimientoService implements IMovimientoService {
     }
 
     @Override
+    @Transactional
     public void eliminar(Long id) {
         if (!movimientoRepository.existsById(id)) {
             throw new RuntimeException("Movimiento no encontrado: " + id);
@@ -87,6 +110,7 @@ public class MovimientoService implements IMovimientoService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ReporteDTO> generarReporte(String clienteId, LocalDateTime inicio, LocalDateTime fin) {
         return movimientoRepository
                 .findByCuenta_ClienteIdAndFechaBetween(clienteId, inicio, fin)
@@ -109,8 +133,8 @@ public class MovimientoService implements IMovimientoService {
     private ReporteDTO mapToReporte(Movimiento movimiento) {
         Cuenta cuenta = movimiento.getCuenta();
         TipoMovimiento tipo = TipoMovimiento.fromString(movimiento.getTipoMovimiento());
-        double valorConSigno = tipo == TipoMovimiento.RETIRO
-                ? -movimiento.getValor()
+        BigDecimal valorConSigno = tipo == TipoMovimiento.RETIRO
+                ? movimiento.getValor().negate()
                 : movimiento.getValor();
 
         return ReporteDTO.builder()

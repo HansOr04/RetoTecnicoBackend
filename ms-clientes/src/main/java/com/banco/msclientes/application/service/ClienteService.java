@@ -6,8 +6,10 @@ import com.banco.msclientes.domain.model.Cliente;
 import com.banco.msclientes.domain.repository.ClienteRepository;
 import com.banco.msclientes.dto.ClienteRequestDTO;
 import com.banco.msclientes.dto.ClienteResponseDTO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -16,6 +18,7 @@ import java.util.List;
  * Aplica hash BCrypt a la contraseña antes de persistir.
  * Nunca expone la contraseña en los DTOs de respuesta.
  */
+@Slf4j
 @Service
 public class ClienteService implements IClienteService {
 
@@ -28,6 +31,7 @@ public class ClienteService implements IClienteService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ClienteResponseDTO> listarTodos() {
         return clienteRepository.findAll()
                 .stream()
@@ -36,6 +40,7 @@ public class ClienteService implements IClienteService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public ClienteResponseDTO obtenerPorClienteId(String clienteId) {
         Cliente cliente = clienteRepository.findByClienteId(clienteId)
                 .orElseThrow(() -> new ClienteNoEncontradoException(clienteId));
@@ -43,8 +48,11 @@ public class ClienteService implements IClienteService {
     }
 
     @Override
+    @Transactional
     public ClienteResponseDTO crear(ClienteRequestDTO dto) {
+        log.info("Creando cliente con clienteId: {}", dto.getClienteId());
         if (clienteRepository.existsByClienteId(dto.getClienteId())) {
+            log.warn("Intento de crear cliente con clienteId duplicado: {}", dto.getClienteId());
             throw new ClienteDuplicadoException(dto.getClienteId());
         }
         Cliente cliente = Cliente.builder()
@@ -58,11 +66,15 @@ public class ClienteService implements IClienteService {
                 .contrasena(passwordEncoder.encode(dto.getContrasena()))
                 .estado(dto.getEstado())
                 .build();
-        return mapToResponse(clienteRepository.save(cliente));
+        ClienteResponseDTO response = mapToResponse(clienteRepository.save(cliente));
+        log.info("Cliente creado exitosamente con clienteId: {}", response.getClienteId());
+        return response;
     }
 
     @Override
+    @Transactional
     public ClienteResponseDTO actualizar(String clienteId, ClienteRequestDTO dto) {
+        log.info("Actualizando cliente con clienteId: {}", clienteId);
         Cliente cliente = clienteRepository.findByClienteId(clienteId)
                 .orElseThrow(() -> new ClienteNoEncontradoException(clienteId));
         cliente.setNombre(dto.getNombre());
@@ -77,7 +89,9 @@ public class ClienteService implements IClienteService {
     }
 
     @Override
+    @Transactional
     public void eliminar(String clienteId) {
+        log.info("Eliminando cliente con clienteId: {}", clienteId);
         Cliente cliente = clienteRepository.findByClienteId(clienteId)
                 .orElseThrow(() -> new ClienteNoEncontradoException(clienteId));
         clienteRepository.deleteById(cliente.getId());

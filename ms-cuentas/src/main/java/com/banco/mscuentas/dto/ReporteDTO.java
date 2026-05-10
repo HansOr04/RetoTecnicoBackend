@@ -2,6 +2,7 @@ package com.banco.mscuentas.dto;
 
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -15,8 +16,8 @@ public class ReporteDTO {
     private String cliente;
     private String numeroCuenta;
     private String tipoCuenta;
-    private Double saldoInicial;
+    private BigDecimal saldoInicial;
     private Boolean estado;
-    private Double movimiento;
-    private Double saldoDisponible;
+    private BigDecimal movimiento;
+    private BigDecimal saldoDisponible;
 }

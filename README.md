@@ -294,4 +294,54 @@ Respuesta (ejemplo):
 | Formato de fecha inválido | 400 |
 | Cliente / Cuenta no encontrado | 404 |
 | Cliente / Cuenta ya registrado | 409 |
+| Cuenta con movimientos (al eliminar) | 409 |
+| Modificación concurrente (optimistic lock) | 409 |
 | Error interno del servidor | 500 |
+
+---
+
+## Consideraciones de arquitectura para producción
+
+### Transaccionalidad
+Todos los métodos de escritura están anotados con `@Transactional`.
+El registro de movimientos (`registrar()`) es atómico: si la persistencia
+del movimiento falla, el cambio de saldo en la cuenta se revierte automáticamente.
+
+### Escalabilidad
+- **Paginación:** los endpoints de lista deben implementar `Pageable` para
+  evitar cargar datasets completos en memoria.
+- **Índices de BD:** los campos `clienteId` (Cuenta), `numeroCuenta` (Cuenta)
+  y `clienteId+fecha` (Movimiento) tienen índices declarados con `@Index` para
+  consultas eficientes con volumen de datos real.
+- **Pool de conexiones:** HikariCP debe configurarse con `maximumPoolSize`
+  apropiado según la carga esperada.
+
+### Concurrencia
+La entidad `Cuenta` implementa optimistic locking con `@Version` para
+prevenir condiciones de carrera en retiros simultáneos sobre la misma cuenta.
+Hibernate lanza `OptimisticLockException` si dos transacciones concurrentes
+modifican el mismo registro, retornando HTTP 409.
+
+### Resiliencia
+En producción se recomienda:
+- Circuit breaker (Resilience4j) para llamadas entre microservicios
+- Retry automático con backoff exponencial
+- Timeouts configurados en clientes HTTP
+
+### Comunicación entre microservicios
+Actualmente ms-cuentas referencia `clienteId` como string lógico sin
+validación en ms-clientes. La evolución arquitectural propuesta es:
+- **Corto plazo:** llamada HTTP síncrona con `RestClient` al crear una cuenta
+- **Largo plazo:** eventos asíncronos con RabbitMQ/Kafka para consistencia eventual
+  (patrón Saga) garantizando que no existan cuentas con `clienteId`s huérfanos.
+
+### Seguridad de API (trabajo pendiente)
+Los endpoints actualmente no requieren autenticación. En producción:
+- Spring Security + JWT para autenticación stateless
+- Roles: `ADMIN` (CRUD completo), `USER` (solo lectura y movimientos propios)
+- Rate limiting para prevenir abuso de endpoints
+
+### Tipos de datos monetarios
+Los campos de dinero usan `BigDecimal` con escala de 2 decimales (`precision=15, scale=2`)
+para evitar errores de precisión en aritmética de punto flotante binario.
+Ejemplo: `100.10 - 0.10 = 100.00` exacto con `BigDecimal`; con `Double` daría `99.99999999999999`.

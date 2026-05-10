@@ -2,6 +2,8 @@ package com.banco.mscuentas.dto;
 
 import lombok.*;
 
+import java.math.BigDecimal;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -12,8 +14,8 @@ public class CuentaResponseDTO {
     private Long id;
     private String numeroCuenta;
     private String tipoCuenta;
-    private Double saldoInicial;
-    private Double saldoDisponible;
+    private BigDecimal saldoInicial;
+    private BigDecimal saldoDisponible;
     private Boolean estado;
     private String clienteId;
 }

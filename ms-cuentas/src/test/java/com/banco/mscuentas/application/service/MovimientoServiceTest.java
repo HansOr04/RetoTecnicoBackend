@@ -12,10 +12,12 @@ import com.banco.mscuentas.dto.ReporteDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -46,8 +48,8 @@ class MovimientoServiceTest {
         cuentaJoseLema.setId(1L);
         cuentaJoseLema.setNumeroCuenta("478758");
         cuentaJoseLema.setTipoCuenta("Ahorro");
-        cuentaJoseLema.setSaldoInicial(2000.0);
-        cuentaJoseLema.setSaldoDisponible(2000.0);
+        cuentaJoseLema.setSaldoInicial(BigDecimal.valueOf(2000.0));
+        cuentaJoseLema.setSaldoDisponible(BigDecimal.valueOf(2000.0));
         cuentaJoseLema.setEstado(true);
         cuentaJoseLema.setClienteId("jose.lema");
 
@@ -55,15 +57,15 @@ class MovimientoServiceTest {
         cuentaMarianela.setId(2L);
         cuentaMarianela.setNumeroCuenta("225487");
         cuentaMarianela.setTipoCuenta("Corriente");
-        cuentaMarianela.setSaldoInicial(100.0);
-        cuentaMarianela.setSaldoDisponible(100.0);
+        cuentaMarianela.setSaldoInicial(BigDecimal.valueOf(100.0));
+        cuentaMarianela.setSaldoDisponible(BigDecimal.valueOf(100.0));
         cuentaMarianela.setEstado(true);
         cuentaMarianela.setClienteId("marianela.montalvo");
     }
 
     @Test
     void registrar_deposito_calculaSaldoCorrecto() {
-        MovimientoRequestDTO dto = buildRequest("478758", "Deposito", 600.0);
+        MovimientoRequestDTO dto = buildRequest("478758", "Deposito", BigDecimal.valueOf(600.0));
 
         when(cuentaRepository.findByNumeroCuenta("478758")).thenReturn(Optional.of(cuentaJoseLema));
         when(cuentaRepository.save(any(Cuenta.class))).thenReturn(cuentaJoseLema);
@@ -75,13 +77,21 @@ class MovimientoServiceTest {
 
         MovimientoResponseDTO resultado = movimientoService.registrar(dto);
 
-        assertThat(resultado.getSaldo()).isEqualTo(2600.0);
-        verify(movimientoRepository, times(1)).save(any(Movimiento.class));
+        assertThat(resultado.getSaldo()).isEqualByComparingTo(BigDecimal.valueOf(2600.0));
+
+        ArgumentCaptor<Movimiento> movCaptor = ArgumentCaptor.forClass(Movimiento.class);
+        verify(movimientoRepository).save(movCaptor.capture());
+        assertThat(movCaptor.getValue().getSaldo()).isEqualByComparingTo(BigDecimal.valueOf(2600.0));
+        assertThat(movCaptor.getValue().getFecha()).isNotNull();
+
+        ArgumentCaptor<Cuenta> cuentaCaptor = ArgumentCaptor.forClass(Cuenta.class);
+        verify(cuentaRepository).save(cuentaCaptor.capture());
+        assertThat(cuentaCaptor.getValue().getSaldoDisponible()).isEqualByComparingTo(BigDecimal.valueOf(2600.0));
     }
 
     @Test
     void registrar_retiro_calculaSaldoCorrecto() {
-        MovimientoRequestDTO dto = buildRequest("478758", "Retiro", 575.0);
+        MovimientoRequestDTO dto = buildRequest("478758", "Retiro", BigDecimal.valueOf(575.0));
 
         when(cuentaRepository.findByNumeroCuenta("478758")).thenReturn(Optional.of(cuentaJoseLema));
         when(cuentaRepository.save(any(Cuenta.class))).thenReturn(cuentaJoseLema);
@@ -93,13 +103,22 @@ class MovimientoServiceTest {
 
         MovimientoResponseDTO resultado = movimientoService.registrar(dto);
 
-        assertThat(resultado.getSaldo()).isEqualTo(1425.0);
+        assertThat(resultado.getSaldo()).isEqualByComparingTo(BigDecimal.valueOf(1425.0));
+
+        ArgumentCaptor<Movimiento> movCaptor = ArgumentCaptor.forClass(Movimiento.class);
+        verify(movimientoRepository).save(movCaptor.capture());
+        assertThat(movCaptor.getValue().getSaldo()).isEqualByComparingTo(BigDecimal.valueOf(1425.0));
+        assertThat(movCaptor.getValue().getFecha()).isNotNull();
+
+        ArgumentCaptor<Cuenta> cuentaCaptor = ArgumentCaptor.forClass(Cuenta.class);
+        verify(cuentaRepository).save(cuentaCaptor.capture());
+        assertThat(cuentaCaptor.getValue().getSaldoDisponible()).isEqualByComparingTo(BigDecimal.valueOf(1425.0));
     }
 
     @Test
     void registrar_retiroExactoSaldoDisponible_dejaSaldoCero() {
-        cuentaMarianela.setSaldoDisponible(540.0);
-        MovimientoRequestDTO dto = buildRequest("225487", "Retiro", 540.0);
+        cuentaMarianela.setSaldoDisponible(BigDecimal.valueOf(540.0));
+        MovimientoRequestDTO dto = buildRequest("225487", "Retiro", BigDecimal.valueOf(540.0));
 
         when(cuentaRepository.findByNumeroCuenta("225487")).thenReturn(Optional.of(cuentaMarianela));
         when(cuentaRepository.save(any(Cuenta.class))).thenReturn(cuentaMarianela);
@@ -111,34 +130,40 @@ class MovimientoServiceTest {
 
         MovimientoResponseDTO resultado = movimientoService.registrar(dto);
 
-        assertThat(resultado.getSaldo()).isEqualTo(0.0);
+        assertThat(resultado.getSaldo()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
     void registrar_saldoInsuficiente_lanzaSaldoInsuficienteException() {
-        MovimientoRequestDTO dto = buildRequest("225487", "Retiro", 600.0);
+        MovimientoRequestDTO dto = buildRequest("225487", "Retiro", BigDecimal.valueOf(600.0));
 
         when(cuentaRepository.findByNumeroCuenta("225487")).thenReturn(Optional.of(cuentaMarianela));
 
         assertThatThrownBy(() -> movimientoService.registrar(dto))
                 .isInstanceOf(SaldoInsuficienteException.class)
                 .hasMessage("Saldo no disponible");
+
+        verify(movimientoRepository, never()).save(any());
+        verify(cuentaRepository, never()).save(any());
     }
 
     @Test
     void registrar_cuentaInexistente_lanzaCuentaNoEncontradaException() {
         when(cuentaRepository.findByNumeroCuenta("000000")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> movimientoService.registrar(buildRequest("000000", "Deposito", 100.0)))
+        assertThatThrownBy(() -> movimientoService.registrar(buildRequest("000000", "Deposito", BigDecimal.valueOf(100.0))))
                 .isInstanceOf(CuentaNoEncontradaException.class)
                 .hasMessageContaining("000000");
+
+        verify(movimientoRepository, never()).save(any());
+        verify(cuentaRepository, never()).save(any());
     }
 
     @Test
     void registrar_tipoMovimientoInvalido_lanzaIllegalArgumentException() {
         when(cuentaRepository.findByNumeroCuenta("478758")).thenReturn(Optional.of(cuentaJoseLema));
 
-        assertThatThrownBy(() -> movimientoService.registrar(buildRequest("478758", "Transferencia", 100.0)))
+        assertThatThrownBy(() -> movimientoService.registrar(buildRequest("478758", "Transferencia", BigDecimal.valueOf(100.0))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Tipo de movimiento inválido");
     }
@@ -149,16 +174,16 @@ class MovimientoServiceTest {
         deposito.setId(1L);
         deposito.setFecha(LocalDateTime.now());
         deposito.setTipoMovimiento("Deposito");
-        deposito.setValor(600.0);
-        deposito.setSaldo(700.0);
+        deposito.setValor(BigDecimal.valueOf(600.0));
+        deposito.setSaldo(BigDecimal.valueOf(700.0));
         deposito.setCuenta(cuentaMarianela);
 
         Movimiento retiro = new Movimiento();
         retiro.setId(2L);
         retiro.setFecha(LocalDateTime.now());
         retiro.setTipoMovimiento("Retiro");
-        retiro.setValor(540.0);
-        retiro.setSaldo(160.0);
+        retiro.setValor(BigDecimal.valueOf(540.0));
+        retiro.setSaldo(BigDecimal.valueOf(160.0));
         retiro.setCuenta(cuentaMarianela);
 
         LocalDateTime inicio = LocalDateTime.now().minusDays(1);
@@ -187,7 +212,36 @@ class MovimientoServiceTest {
         assertThat(resultado).isNotNull().isEmpty();
     }
 
-    private MovimientoRequestDTO buildRequest(String numeroCuenta, String tipo, double valor) {
+    @Test
+    void registrar_valorDecimal_saldoResultadoEsExacto() {
+        // Verifica que no hay errores de punto flotante binario:
+        // 100.10 - 0.10 debe ser exactamente 100.00, no 99.99999999999999
+        Cuenta cuenta = new Cuenta();
+        cuenta.setNumeroCuenta("TEST-001");
+        cuenta.setSaldoDisponible(BigDecimal.valueOf(100.10));
+
+        when(cuentaRepository.findByNumeroCuenta("TEST-001")).thenReturn(Optional.of(cuenta));
+        when(movimientoRepository.save(any())).thenAnswer(inv -> {
+            Movimiento m = inv.getArgument(0);
+            m.setCuenta(cuenta);
+            return m;
+        });
+        when(cuentaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        MovimientoRequestDTO dto = MovimientoRequestDTO.builder()
+                .numeroCuenta("TEST-001")
+                .tipoMovimiento("Retiro")
+                .valor(BigDecimal.valueOf(0.10))
+                .build();
+
+        MovimientoResponseDTO response = movimientoService.registrar(dto);
+
+        // Con BigDecimal: 100.10 - 0.10 = exactamente 100.00
+        // Con Double esto fallaría: 100.10 - 0.10 = 99.99999999999999
+        assertThat(response.getSaldo()).isEqualByComparingTo(BigDecimal.valueOf(100.00));
+    }
+
+    private MovimientoRequestDTO buildRequest(String numeroCuenta, String tipo, BigDecimal valor) {
         return MovimientoRequestDTO.builder()
                 .numeroCuenta(numeroCuenta)
                 .tipoMovimiento(tipo)
