@@ -1,6 +1,8 @@
 package com.banco.mscuentas.application.service;
 
+import com.banco.mscuentas.domain.exception.CuentaInactivaException;
 import com.banco.mscuentas.domain.exception.CuentaNoEncontradaException;
+import com.banco.mscuentas.domain.exception.MovimientoNoEncontradoException;
 import com.banco.mscuentas.domain.exception.SaldoInsuficienteException;
 import com.banco.mscuentas.domain.model.Cuenta;
 import com.banco.mscuentas.domain.model.Movimiento;
@@ -18,10 +20,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Implementación de {@link IMovimientoService}.
- * Ver Javadoc de la interfaz para las 7 reglas de negocio garantizadas.
- */
 @Slf4j
 @Service
 public class MovimientoService implements IMovimientoService {
@@ -43,11 +41,6 @@ public class MovimientoService implements IMovimientoService {
                 .toList();
     }
 
-    /**
-     * Registra un movimiento (depósito o retiro) y actualiza el saldo disponible.
-     * Ejecuta en una única transacción atómica: si la persistencia del movimiento
-     * falla, el cambio de saldo en la cuenta se revierte automáticamente.
-     */
     @Override
     @Transactional
     public MovimientoResponseDTO registrar(MovimientoRequestDTO dto) {
@@ -56,6 +49,11 @@ public class MovimientoService implements IMovimientoService {
 
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(dto.getNumeroCuenta())
                 .orElseThrow(() -> new CuentaNoEncontradaException(dto.getNumeroCuenta()));
+
+        if (Boolean.FALSE.equals(cuenta.getEstado())) {
+            log.warn("Intento de operar en cuenta inactiva: {}", cuenta.getNumeroCuenta());
+            throw new CuentaInactivaException(dto.getNumeroCuenta());
+        }
 
         TipoMovimiento tipo = TipoMovimiento.fromString(dto.getTipoMovimiento());
 
@@ -90,21 +88,16 @@ public class MovimientoService implements IMovimientoService {
     }
 
     @Override
-    @Transactional
     public MovimientoResponseDTO actualizar(Long id, MovimientoRequestDTO dto) {
-        Movimiento movimiento = movimientoRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Movimiento no encontrado: " + id));
-        TipoMovimiento tipo = TipoMovimiento.fromString(dto.getTipoMovimiento());
-        movimiento.setTipoMovimiento(tipo.getDescripcion());
-        movimiento.setValor(dto.getValor());
-        return mapToResponse(movimientoRepository.save(movimiento));
+        throw new UnsupportedOperationException(
+                "Los movimientos son registros históricos inmutables y no pueden modificarse");
     }
 
     @Override
     @Transactional
     public void eliminar(Long id) {
         if (!movimientoRepository.existsById(id)) {
-            throw new RuntimeException("Movimiento no encontrado: " + id);
+            throw new MovimientoNoEncontradoException(id);
         }
         movimientoRepository.deleteById(id);
     }

@@ -1,0 +1,8 @@
+src/
+.mvn/
+mvnw
+mvnw.cmd
+*.md
+.gitignore
+target/surefire-reports/
+target/site/

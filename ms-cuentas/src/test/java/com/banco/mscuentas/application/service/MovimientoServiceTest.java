@@ -1,6 +1,8 @@
 package com.banco.mscuentas.application.service;
 
+import com.banco.mscuentas.domain.exception.CuentaInactivaException;
 import com.banco.mscuentas.domain.exception.CuentaNoEncontradaException;
+import com.banco.mscuentas.domain.exception.MovimientoNoEncontradoException;
 import com.banco.mscuentas.domain.exception.SaldoInsuficienteException;
 import com.banco.mscuentas.domain.model.Cuenta;
 import com.banco.mscuentas.domain.model.Movimiento;
@@ -239,6 +241,63 @@ class MovimientoServiceTest {
         // Con BigDecimal: 100.10 - 0.10 = exactamente 100.00
         // Con Double esto fallaría: 100.10 - 0.10 = 99.99999999999999
         assertThat(response.getSaldo()).isEqualByComparingTo(BigDecimal.valueOf(100.00));
+    }
+
+    @Test
+    void listarTodos_retornaListaConMovimientos() {
+        Movimiento mov = new Movimiento();
+        mov.setId(1L);
+        mov.setFecha(LocalDateTime.now());
+        mov.setTipoMovimiento("Deposito");
+        mov.setValor(BigDecimal.valueOf(100.0));
+        mov.setSaldo(BigDecimal.valueOf(2100.0));
+        mov.setCuenta(cuentaJoseLema);
+
+        when(movimientoRepository.findAll()).thenReturn(List.of(mov));
+
+        List<MovimientoResponseDTO> resultado = movimientoService.listarTodos();
+
+        assertThat(resultado).hasSize(1);
+        assertThat(resultado.get(0).getNumeroCuenta()).isEqualTo("478758");
+    }
+
+    @Test
+    void registrar_cuentaInactiva_lanzaCuentaInactivaException() {
+        cuentaJoseLema.setEstado(false);
+        when(cuentaRepository.findByNumeroCuenta("478758")).thenReturn(Optional.of(cuentaJoseLema));
+
+        assertThatThrownBy(() -> movimientoService.registrar(buildRequest("478758", "Deposito", BigDecimal.valueOf(100.0))))
+                .isInstanceOf(CuentaInactivaException.class)
+                .hasMessageContaining("478758");
+
+        verify(movimientoRepository, never()).save(any());
+        verify(cuentaRepository, never()).save(any());
+    }
+
+    @Test
+    void actualizar_lanzaUnsupportedOperationException() {
+        assertThatThrownBy(() -> movimientoService.actualizar(1L, buildRequest("478758", "Deposito", BigDecimal.valueOf(100.0))))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void eliminar_movimientoExistente_eliminaCorrectamente() {
+        when(movimientoRepository.existsById(1L)).thenReturn(true);
+
+        movimientoService.eliminar(1L);
+
+        verify(movimientoRepository, times(1)).deleteById(1L);
+    }
+
+    @Test
+    void eliminar_movimientoNoEncontrado_lanzaMovimientoNoEncontradoException() {
+        when(movimientoRepository.existsById(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> movimientoService.eliminar(99L))
+                .isInstanceOf(MovimientoNoEncontradoException.class)
+                .hasMessageContaining("99");
+
+        verify(movimientoRepository, never()).deleteById(any());
     }
 
     private MovimientoRequestDTO buildRequest(String numeroCuenta, String tipo, BigDecimal valor) {
