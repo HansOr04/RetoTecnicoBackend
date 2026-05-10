@@ -65,7 +65,7 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>2.3.0</version>
+            <version>3.0.3</version>
         </dependency>
     </dependencies>
 
@@ -94,6 +94,7 @@
                         <exclude>**/domain/model/**</exclude>
                         <exclude>**/*Application.class</exclude>
                         <exclude>**/infrastructure/config/**</exclude>
+                        <exclude>**/infrastructure/controller/GlobalExceptionHandler.class</exclude>
                     </excludes>
                 </configuration>
                 <executions>
